@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Microsoft.VisualBasic;
+using System;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace OEP;
 
@@ -11,6 +13,11 @@ public sealed class Program
         public static List<AtmosphereLayer> Layers { get; private set; }
 
         private static bool initialised = false;
+
+        public static void Deinit()
+        {
+            initialised = false;
+        }
 
         public static void Init(List<IWeatherCondition> conditions, List<AtmosphereLayer> layers)
         {
@@ -36,9 +43,8 @@ public sealed class Program
 
                 HandleCreatedLayers();
 
-                Console.WriteLine("Printing round...");
+                Console.WriteLine($"Round {index}");
                 PrintState();
-                Console.WriteLine("Printed round\n\n\n");
 
                 index = NextCondition(index);
             }
@@ -114,7 +120,7 @@ public sealed class Program
             {
                 if (layer is OzoneLayer)
                     ozone++;
-                else if (layer is OxygenLayer)
+                else if (layer is OxygeneLayer)
                     oxygen++;
                 else if (layer is CO2Layer)
                     co2++;
@@ -124,7 +130,7 @@ public sealed class Program
         }
     }
 
-    public abstract record AtmosphereLayer
+    public abstract class AtmosphereLayer
     {
         public double Thickness { get; set; }
         public AtmosphereLayer? CreatedLayer { get; set; } = null;
@@ -135,9 +141,14 @@ public sealed class Program
 
         public abstract AtmosphereLayer? FindSuitableAfter(int index);
         public abstract void HandleWithCondition(IWeatherCondition condition);
+
+        public override string ToString()
+        {
+            return $"AtmosphereLayer (Thickness: {Thickness}";
+        }
     }
 
-    public sealed record OzoneLayer : AtmosphereLayer
+    public sealed class OzoneLayer : AtmosphereLayer
     {
         public OzoneLayer(double thickness) : base(thickness) { }
 
@@ -159,18 +170,23 @@ public sealed class Program
         {
             condition.HandleLayer(this);
         }
+
+        public override string ToString()
+        {
+            return $"OzoneLayer (Thickness: {Thickness}";
+        }
     }
 
-    public sealed record OxygenLayer : AtmosphereLayer
+    public sealed class OxygeneLayer : AtmosphereLayer
     {
-        public OxygenLayer(double thickness) : base(thickness) { }
+        public OxygeneLayer(double thickness) : base(thickness) { }
 
         public override AtmosphereLayer? FindSuitableAfter(int index)
         {
             for (int i = index + 1; i < StateMachine.Layers.Count; i++)
             {
                 var layer = StateMachine.Layers[i];
-                if (layer is OxygenLayer && !layer.FloatsUp)
+                if (layer is OxygeneLayer && !layer.FloatsUp)
                 {
                     return layer;
                 }
@@ -183,9 +199,14 @@ public sealed class Program
         {
             condition.HandleLayer(this);
         }
+
+        public override string ToString()
+        {
+            return $"Oxygene (Thickness: {Thickness}";
+        }
     }
 
-    public sealed record CO2Layer : AtmosphereLayer
+    public sealed class CO2Layer : AtmosphereLayer
     {
         public CO2Layer(double thickness) : base(thickness) { }
 
@@ -207,12 +228,17 @@ public sealed class Program
         {
             condition.HandleLayer(this);
         }
+
+        public override string ToString()
+        {
+            return $"CO2Layer (Thickness: {Thickness}";
+        }
     }
 
     public interface IWeatherCondition
     {
         public void HandleLayer(OzoneLayer layer);
-        public void HandleLayer(OxygenLayer layer);
+        public void HandleLayer(OxygeneLayer layer);
         public void HandleLayer(CO2Layer layer);
     }
 
@@ -223,7 +249,7 @@ public sealed class Program
             layer.CreatedLayer = null;
         }
 
-        public void HandleLayer(OxygenLayer layer)
+        public void HandleLayer(OxygeneLayer layer)
         {
             double removed = layer.Thickness * 0.5;
             layer.Thickness -= removed;
@@ -243,7 +269,7 @@ public sealed class Program
             layer.CreatedLayer = null;
         }
 
-        public void HandleLayer(OxygenLayer layer)
+        public void HandleLayer(OxygeneLayer layer)
         {
             double removed = layer.Thickness * 0.05;
             layer.Thickness -= removed;
@@ -254,7 +280,7 @@ public sealed class Program
         {
             double removed = layer.Thickness * 0.05;
             layer.Thickness -= removed;
-            layer.CreatedLayer = new OxygenLayer(removed);
+            layer.CreatedLayer = new OxygeneLayer(removed);
         }
     }
 
@@ -264,10 +290,10 @@ public sealed class Program
         {
             double removed = layer.Thickness * 0.05;
             layer.Thickness -= removed;
-            layer.CreatedLayer = new OxygenLayer(removed);
+            layer.CreatedLayer = new OxygeneLayer(removed);
         }
 
-        public void HandleLayer(OxygenLayer layer)
+        public void HandleLayer(OxygeneLayer layer)
         {
             double removed = layer.Thickness * 0.15;
             layer.Thickness -= removed;
@@ -278,6 +304,83 @@ public sealed class Program
         {
             layer.CreatedLayer = null;
         }
+    }
+
+    public static void Test(string[] contents)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+        try
+        {
+            if (contents == null || contents.Length < 2)
+            {
+                throw new Exception($"Bad file {contents}");
+            }
+
+            var conditions_s = contents[0];
+            if (conditions_s.Count() == 0)
+            {
+                throw new Exception($"No conditions");
+            }
+
+            var conditions = new List<IWeatherCondition>();
+            foreach (var c in conditions_s)
+            {
+                IWeatherCondition condition;
+                switch (c)
+                {
+                    case 'm': condition = new OtherCondition(); break;
+                    case 'n': condition = new SunnyCondition(); break;
+                    case 'z': condition = new StormyCondition(); break;
+                    default: throw new Exception($"Unknown condition {c}");
+                }
+
+                conditions.Add(condition);
+            }
+
+            var layers = new List<AtmosphereLayer>();
+            for (var i = 1; i < contents.Length; i++)
+            {
+                var line = contents[i];
+                var tokens = line.Split(" ");
+                if (tokens.Length != 2)
+                {
+                    throw new Exception($"Bad line {line}");
+                }
+
+                var character = tokens[0];
+                if (character.Length != 1)
+                {
+                    throw new Exception($"Bad identifier {character}");
+                }
+
+                double thickness;
+                if (!double.TryParse(tokens[1], out thickness))
+                {
+                    throw new Exception($"Bad thickness {tokens[1]}, {line}");
+                }
+
+                AtmosphereLayer layer;
+                switch (character[0])
+                {
+                    case 'z': layer = new OzoneLayer(thickness); break;
+                    case 'x': layer = new OxygeneLayer(thickness); break;
+                    case 's': layer = new CO2Layer(thickness); break;
+                    default: throw new Exception($"Unknown layer {character[0]}");
+                }
+
+                layers.Add(layer);
+            }
+
+            StateMachine.Init(conditions, layers);
+            StateMachine.Start();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"An exception occourred: {e.Message}");
+        }
+
+        StateMachine.Deinit();
     }
 
     static void Main(string[] args)
@@ -346,7 +449,7 @@ public sealed class Program
                 switch (character[0])
                 {
                     case 'z': layer = new OzoneLayer(thickness); break;
-                    case 'x': layer = new OxygenLayer(thickness); break;
+                    case 'x': layer = new OxygeneLayer(thickness); break;
                     case 's': layer = new CO2Layer(thickness); break;
                     default: throw new Exception($"Unknown layer {character[0]}");
                 }
